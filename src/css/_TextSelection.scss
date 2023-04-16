@@ -3,8 +3,8 @@
 
     // Make it so right-clicking on "blank" part of svg sends events to the image (for saving)
     pointer-events: none;
-    .BRwordElement { pointer-events: all; }
-    &.selectingSVG { 
+    a, .BRwordElement, rect.clickable { pointer-events: all; }
+    &.selectingSVG {
         pointer-events: auto; 
         cursor: text;
     }
@@ -23,6 +23,19 @@
         cursor: text;
         white-space: pre;
         font-family: Georgia, serif;
+    }
+
+    a rect, rect.clickable {
+        fill: hsla(210, 74%, 62%, 0.2);
+        stroke: hsla(210, 74%, 62%, 0.8);
+        stroke-width: 6px;
+        transition-property: fill, stroke;
+        transition-duration: 0.2s;
+
+        &:hover {
+            fill: hsla(210, 74%, 62%, 0.3);
+            stroke: hsla(210, 74%, 62%, 1);
+        }
     }
 }
 
@@ -44,4 +57,143 @@
     -webkit-user-select: none;
     -moz-user-select: none;
     user-select: none;
+}
+
+@keyframes slide-in {
+    0% { opacity: 0; transform: scale(1.2); filter: blur(10px); }
+    70% { opacity: 0; transform: scale(1.2); filter: blur(10px); }
+    100% { opacity: 1; }
+}
+
+#jit-context {
+    display: none;
+
+    width: 370px;
+    position: fixed;
+    bottom: 40px;
+    right: 8px;
+
+    z-index: 999;
+
+    overflow: hidden;
+    overflow: clip;
+
+    border: 1px solid rgba(255,255,255,0.1);
+
+    color: #222;
+    font-family: system-ui;
+    font-size: 0.95em;
+
+    animation: slide-in .6s;
+
+    border-radius: 10px;
+    background-color: #ffffff8f;
+    box-shadow: 0 0 5px rgba(0,0,0,0.2), 0 0 10px rgba(0,0,0,0.3), 0 0 1000px 5px white inset;
+    backdrop-filter: blur(50px);
+
+    p:first-child {
+        margin-top: 0;
+    }
+
+    & > section {
+        position: relative;
+        min-height: 40px;
+
+        & > a {
+            position: absolute;
+            bottom: 7px;
+            right: 0;
+            padding: 8px 10px;
+            background: #f7f7f76e;
+            backdrop-filter: blur(4px);
+            border-radius: 9px;
+            border: 1px solid #eee;
+            transition: background-color 0.2s;
+            &:hover {
+                background: white;
+            }
+        }
+    }
+    & > section:not(:first-child) {
+        border-top: 1px solid #AAA;
+    }
+
+    .wikipedia-extract {
+        overflow: hidden;
+        overflow: clip;
+        max-height: 150px;
+        display: flex;
+
+        & > img {
+            width: 150px;
+            object-fit: cover;
+        }
+        & > .extract {
+	        overflow: auto;
+            padding: 20px;
+            margin-top: -4px;
+            height: inherit;
+            padding: 20px;
+            scrollbar-width: thin;
+        }
+        & > img ~ .extract {
+            padding: 20px 10px;
+        }
+        & > a {
+            right: 15px;
+        }
+
+        // Make space for the button at the bottom
+        .extract::after {
+            display: block;
+            content: "";
+            width: 1px;
+            height: 30px;
+        }
+    }
+
+    .openlibrary-more-books {
+        & > a {
+            bottom: 15px;
+        }
+        .ol-books-carousel {
+	    overflow-x: auto;
+            a {
+                color: #222;
+                display: inline-flex;
+                text-decoration: none;
+            }
+
+            img, .ol-fb-cover {
+                width: 100px;
+                text-align: center;
+                margin-left: 2px;
+            }
+            img {
+                object-fit: contain;
+                object-position: top;
+            }
+            .ol-fb-cover {
+                background: #AAA;
+                border-radius: 2px;
+                padding-top: 10px;
+                padding-left: 4px;
+                padding-right: 4px;
+                box-sizing: border-box;
+                
+                font-family: Georgia, serif;
+            }
+            overflow-x: auto;
+            display: flex;
+            
+            overflow-y: hidden;
+        }
+
+        h3 {
+            color: #333;
+            font-size: 1em;
+            margin: 0;
+            padding: 10px;
+        }
+    }
 }

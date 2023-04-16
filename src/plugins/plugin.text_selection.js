@@ -68,6 +68,8 @@ export class TextSelectionPlugin {
      * unusable. For now don't render text layer for pages with too many words.
      */
     this.maxWordRendered = 2500;
+
+    this.entities = this.loadEntities();
   }
 
   init() {
@@ -87,6 +89,96 @@ export class TextSelectionPlugin {
         return undefined;
       }
     });
+  }
+
+  async loadEntities() {
+    // From https://docs.google.com/spreadsheets/d/1SeAttSDh3SoXW9dZLi9OruWavV3m4GIVfEiwxGbvIKg/edit#gid=0
+    // The API we were using has been discontinued by Google :(
+    const rows = `
+      Name	Wikidata QID	Type (Person, Place, Temporal, URL, Book)
+      Socrates	Q913	Person
+      Socr	Q913	Person
+      Aristophanes	Q43353	Person
+      Anytus	Q2082582	Person
+      Gorgias the Leontine	Q179785	Person
+      Prodicus the Cean	Q297402	Person
+      Gorgias	Q179785	Person
+      Gorg	Q179785	Person
+      Prodicus	Q297402	Person
+      Hippias the Elean	Q210573	Person
+      Callias	Q2436238	Person
+      Hippias	Q210573	Person
+      Plato	Q859	Person
+      Melitus	Q1175697	Person
+      Anaxagoras	Q83041	Person
+      Clazomene	Q3134255	Person
+      Clazomenae	Q3134255	Person
+      Hermotimus	Q3134255	Person
+      Meletus	Q1175697	Person
+      Mel	Q1175697	Person
+      Delos	Q173148	Place
+      Island of Delos	Q173148	Place
+      Worcester College, Oxford	Q780745	Place
+      Lycon	Q2920534	Person
+      Any t us	Q2082582	Person
+      London	Q84	Place
+      HENRY G. BOHN	Q5580808	Person
+      BOHN	Q5580808	Person
+      BOHN'S	Q5580808	Person
+      MDCCCXLVIII	Q7647	Temporal
+      1848	Q7647	Temporal
+      LIBRARY OF THE UNIVERSITY OF CALIFORNIA LOS ANGELES	Q7895173	Place
+      Taylor	Q509187	Person
+      Tay- lor	Q509187	Person
+      Floyer Sydenham	Q5462596	Person
+      Sydenham	Q5462596	Person
+      Trinity College, Cambridge	Q332342	Place
+      Troy	Q22647	Place
+      Hector	Q186271	Person
+      Patroclus	Q186271	Person
+      Thetis	Q184437	Person
+      Stallbaum	Q110875	Person
+      Iliad	Q8275	Book
+      Ast	Q77636	Person
+      crito	Q267634	book
+      Internet Archive	Q461	Place
+      The Apology of Socrates	Q273668	Book
+      Bekker	Q77606	Person
+      Oxford	Q34217	Place
+      Henry Cary	Q5719221	Person
+      Henry Gary	Q5719221	Person
+      H\. C	Q5719221	Person
+      callicles	Q553801	Person
+      Lysis	Q924977	Book
+      Polus	Q372798	Person
+      Pol	Q372798	Person
+      Androtion	Q514262	Person
+      Tisander	Q27963635	Person
+      Macedonia	Q83958	Place
+      Scythians	Q131802	Place
+      Xerxes	Q129165	Person
+      Greece	Q11772	Place
+      Delphi	Q75459	Place
+      Zethus	Q23015791	Person
+      Amphion	Q23015791	Person
+      Hades	Q41410	Person
+      Simmias	Q928470	Person
+      Cebes	Q965144	Person
+      Odysseus	Q47231	Person
+      Odyssey	Q35160	Book
+      Ulysses	Q47231	Person
+      Homer	Q6691	Person
+      theban	Q29223	Place
+      cadmus	Q27613	Person
+    `.trim()
+      .split('\n')
+      .map(line => line.trim().split('\t'));
+    return rows.slice(1)
+      .map(([name, wikidata, type]) => ({
+        re: new RegExp(`\\b${name}\\b`, 'ig'),
+        type,
+        wikidata,
+      }));
   }
 
   /**
@@ -138,19 +230,29 @@ export class TextSelectionPlugin {
    */
   defaultMode(svg) {
     svg.classList.remove("selectingSVG");
-    $(svg).on("mousedown.textSelectPluginHandler", (event) => {
-      if (!$(event.target).is(".BRwordElement")) return;
-      event.stopPropagation();
-      svg.classList.add("selectingSVG");
-      $(svg).one("mouseup.textSelectPluginHandler", (event) => {
-        if (window.getSelection().toString() != "") {
-          event.stopPropagation();
-          $(svg).off(".textSelectPluginHandler");
-          this.textSelectingMode(svg);
-        }
-        else svg.classList.remove("selectingSVG");
-      });
-    });
+    $(svg).on("mousedown.textSelectPluginHandler", (downEvent) => {
+      if ($(downEvent.target).parents('a, rect.clickable').length) {
+        downEvent.stopPropagation();
+        $(svg).one("mouseup.textSelectPluginHandler", (upEvent) => {
+          if (downEvent.target == upEvent.target) {
+            upEvent.stopPropagation();
+          }
+        });
+      }
+      else if ($(downEvent.target).is(".BRwordElement")) {
+        downEvent.stopPropagation();
+        svg.classList.add("selectingSVG");
+
+        $(svg).one("mouseup.textSelectPluginHandler", (upEvent) => {
+          if (window.getSelection().toString() != "") {
+            upEvent.stopPropagation();
+            $(svg).off(".textSelectPluginHandler");
+            this.textSelectingMode(svg);
+          }
+          else svg.classList.remove("selectingSVG");
+        });
+      }
+    })
   }
 
   /**
@@ -182,6 +284,145 @@ export class TextSelectionPlugin {
     if (!$svg.length) return;
     $svg.each((i, s) => this.defaultMode(s));
     this.interceptCopy($container);
+  }
+
+  getWordDimensions(word) {
+    const [left, bottom, right, top] = $(word).attr("coords").split(',').map(parseFloat);
+    return {left, bottom, right, top};
+  }
+
+  createWordElement(type, word) {
+    const {left, bottom, right, top} = this.getWordDimensions(word);
+    const el = document.createElementNS("http://www.w3.org/2000/svg", type);
+    el.setAttribute("x", left.toString());
+    el.setAttribute("y", bottom.toString());
+    el.setAttribute("width", (right - left).toString());
+    el.setAttribute("height", (bottom - top).toString());
+    el.setAttribute("textLength", (right - left).toString());
+    return el;
+  }
+
+  highlightRect(svg, word, e = null, meta = null) {
+    const rect = this.createWordElement('rect', word);
+    rect.setAttribute('rx', '8');
+    rect.setAttribute('ry', '8');
+    rect.classList.add("clickable");
+    if (meta) {
+      rect.setAttribute('title', meta.wikidata);
+    }
+
+    // .clickable listener
+    rect.addEventListener("click", async ev => {
+      console.log('hello world');
+      const data = await fetch(
+        `https://www.wikidata.org/wiki/Special:EntityData/${meta.wikidata}.json`
+      ).then((res) => res.json());
+      const popup = document.getElementById("jit-context");
+
+      popup.style.display = "block";
+      popup.innerHTML = '';
+      const wpExtract = document.createElement('section');
+      wpExtract.classList.add('wikipedia-extract');
+      popup.append(wpExtract);
+
+      // WP Image
+      const imageClaim = data.entities[meta.wikidata].claims.P18;
+      if (imageClaim) {
+        const imageCommonsFilename = imageClaim[0].mainsnak.datavalue.value;
+        // Need to use JSONP for this, so can't use fetch. The API doesn't support CORS.
+        const commonsAPIResponse = await $.ajax({
+          url: 'https://commons.wikimedia.org/w/api.php?' + new URLSearchParams({
+            action: 'query',
+            format: 'json',
+            prop: 'imageinfo',
+            iiprop: 'url',
+            iilimit: '1',
+            iiurlwidth: '400',
+            titles: `File:${imageCommonsFilename}`,
+          }),
+          dataType: 'jsonp',
+          cache: true,
+        });
+        const imageUrl = commonsAPIResponse.query.pages[Object.keys(commonsAPIResponse.query.pages)[0]].imageinfo[0].thumburl;
+        wpExtract.innerHTML += `<img src="${imageUrl}">`;
+      }
+
+      const USER_LANG = 'en';
+      const wpTitle = data.entities[meta.wikidata].sitelinks[`${USER_LANG}wiki`].title;
+
+      // WP Link
+      const wpLink = document.createElement('a');
+      wpLink.href = `https://${USER_LANG}.wikipedia.org/wiki/${wpTitle}`;
+      wpLink.textContent = 'View on Wikipedia »';
+      wpLink.target = '_blank';
+      wpExtract.append(wpLink);
+
+      // WP Description
+      const wpAPIResponse = await $.ajax({
+        url: `https://${USER_LANG}.wikipedia.org/w/api.php?` + new URLSearchParams({
+          format: 'json',
+          action: 'query',
+          prop: 'extracts',
+          titles: wpTitle,
+        }),
+        dataType: 'jsonp',
+        cache: true,
+      });
+      const htmlExtract = wpAPIResponse.query.pages[Object.keys(wpAPIResponse.query.pages)[0]].extract;
+      const extractDiv = document.createElement('div');
+      extractDiv.classList.add('extract');
+      const html = new DOMParser().parseFromString(htmlExtract, 'text/html');
+      extractDiv.appendChild(html.querySelector(`p:not(.mw-empty-elt)`));
+      wpExtract.append(extractDiv);
+
+      // OL More books by...
+      const olidClaim = data.entities[meta.wikidata].claims.P648;
+      if (olidClaim) {
+        const olid = olidClaim[0].mainsnak.datavalue.value;
+        const olMoreBooks = document.createElement('section');
+        olMoreBooks.classList.add('openlibrary-more-books');
+        const olLink = document.createElement('a');
+        olLink.href = `https://openlibrary.org/b/${olid}`;
+        olLink.textContent = 'View on Open Library »';
+        olLink.target = '_blank';
+        olMoreBooks.append(olLink);
+
+        const olTypes = {'A': 'authors', 'W': 'works', 'M': 'editions'}
+        const olType = olTypes[olid[olid.length-1]];
+        const olHref = `https://openlibrary.org/${olType}/${olid}`;
+        const header = document.createElement('h3');
+        header.textContent = olType === 'authors' ? "Books by this author" :  "Browse these editions";
+        olMoreBooks.append(header);
+
+        const carousel = document.createElement('div');
+        carousel.classList.add('ol-books-carousel');
+        const olBooks = olType === 'works' ? `${olHref}/editions.json` : `${olHref}/works.json`;
+        console.log(olBooks);  
+        const olResponse = await fetch(olBooks).then(r => r.json());
+        const bookEls = olResponse.entries.map(book => {
+          const el = $(`<a href="https://openlibrary.org/${book.key}" target="_blank" />`)[0];
+          const coverId = book.covers?.[0];
+          if (coverId) {
+            $(el).append(`<img src="https://covers.openlibrary.org/b/id/${coverId}-M.jpg">`);
+          } else {
+            const cover = $(`<div class="ol-fb-cover" />`)[0];
+            cover.textContent = book.title;
+            el.appendChild(cover);
+          }
+          el.title = book.title;
+          return el;
+        });
+        $(carousel).append(bookEls);
+        olMoreBooks.append(carousel);
+
+        popup.append(olMoreBooks);
+      }
+    });
+
+    // order of layers (to enable hover)
+    const {top} = this.getWordDimensions(word);
+    rect.setAttribute('y', top);
+    e ? e.appendChild(rect) && svg.appendChild(e) : svg.appendChild(rect);
   }
 
   /**
@@ -224,11 +465,8 @@ export class TextSelectionPlugin {
         const wordHeight = bottom - top;
         wordHeightArr.push(wordHeight);
 
-        const wordTspan = document.createElementNS("http://www.w3.org/2000/svg", this.svgWordElement);
+        const wordTspan = this.createWordElement(this.svgWordElement, currWord);
         wordTspan.setAttribute("class", "BRwordElement");
-        wordTspan.setAttribute("x", left.toString());
-        wordTspan.setAttribute("y", bottom.toString());
-        wordTspan.setAttribute("textLength", (right - left).toString());
         wordTspan.setAttribute("lengthAdjust", "spacingAndGlyphs");
         wordTspan.textContent = currWord.textContent;
         paragSvg.appendChild(wordTspan);
@@ -260,6 +498,85 @@ export class TextSelectionPlugin {
       paragSvg.setAttribute("font-size", paragWordHeight.toString());
       svg.appendChild(paragSvg);
     });
+
+    this.entities.then(entities => {
+
+      function indexXml(node) {
+        function main(node, index, str) {
+          if (node.children.length == 0) {
+            const word = str ? ' ' + node.textContent : node.textContent;
+            const indexElement = { range: [str.length, str.length + word.length], node };
+            index.push(indexElement);
+            return str + word;
+          } else {
+            let aggStr = str;
+            for (const el of node.children) {
+              aggStr = main(el, index, aggStr);
+            }
+            return aggStr;
+          }
+        }
+        const index = [];
+        const str = main(node, index, '');
+        return {index, str};
+      }
+
+      function findMatchingWords(str, index, re) {
+        const matches = [];
+        for (const match of str.matchAll(re)) {
+          const start = match.index;
+          const end = match.index + match[0].length;
+          // start=10, end=27
+          // {"range":[0,5],"node":{}},
+          // {"range":[5,9],"node":{}},
+          // {"range":[9,18],"node":{}},
+          // {"range":[18,27],"node":{}}
+          const nodes = [];
+          let started = false;
+          for (const {node, range} of index) {
+            if (start >= range[0] && start <= range[1]) {
+              started = true;
+            }
+            if (started) {
+              nodes.push(node);
+              if (end >= range[0] && end <= range[1]) {
+                started = false;
+              }
+            }
+          }
+          matches.push(nodes);
+        }
+        return matches;
+      }
+
+      const {index, str} = indexXml(XMLpage);
+      for (const entity of entities) {
+        const matches = findMatchingWords(str, index, entity.re);
+        if (matches.length) {
+          for (const match of matches) {
+            for (const node of match) {
+              const a = this.createWordElement('a', node);
+              this.highlightRect(svg, node, a, entity);
+            }
+          }
+        }
+      }
+    });
+
+    // Checks for entities
+    for (const word of Array.from($(XMLpage).find("WORD"))) {
+      const contents = word.textContent.trim()
+        // Remove any trailing noise that sometimes appears
+        .replace(/[.:;]+$/, '');
+      // check for URLs
+      if (/(^(http|www\.)|\.(com|org))/.test(contents) && contents != 'http') {
+        const url = contents.startsWith('http') ? contents : `http://${contents}`;
+        const a = this.createWordElement('a', word);
+        a.setAttribute('href', url);
+        a.setAttribute('target', '_blank');
+        this.highlightRect(svg, word, a);
+      }
+    }
     this.stopPageFlip($container);
   }
 }
@@ -275,6 +592,15 @@ export class BookreaderWithTextSelection extends BookReader {
       this.textSelectionPlugin.init();
     }
     super.init();
+    // cruft code for jit-popup
+    const popup = document.createElement("div");
+    popup.setAttribute("id", "jit-context");
+    document.getElementById('BookReader').appendChild(popup);
+
+    document.body.addEventListener('click', ev => {
+      if (!$(ev.target).parents('#jit-context').length)
+        popup.style.display = 'none';
+    });
   }
 
   /**
