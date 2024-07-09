@@ -241,6 +241,7 @@ BookReader.prototype.setup = function(options) {
   this.imageCache = new ImageCache(this.book, {
     useSrcSet: this.options.useSrcSet,
     reduceSet: this.reduceSet,
+    renderPageURI: options.renderPageURI.bind(this),
   });
 
   /**
